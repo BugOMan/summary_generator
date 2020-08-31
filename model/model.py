@@ -102,7 +102,7 @@ class Attention(nn.Module):
         s_t = s_t.expand_as(encoder_output).contiguous()
 
         # calculate attention scores
-        # Equation(11).
+        # Equation(1).
         # Wh h_* (batch_size, seq_length, 2*hidden_units)
         encoder_features = self.Wh(encoder_output.contiguous())
         # Ws s_t (batch_size, seq_length, 2*hidden_units)
@@ -112,17 +112,20 @@ class Attention(nn.Module):
 
         # Add coverage feature.
         if config.coverage:
+            # Equation(11).
             coverage_features = self.wc(coverage_vector.unsqueeze(2))  # wc c
             att_inputs = att_inputs + coverage_features
 
         # (batch_size, seq_length, 1)
         score = self.v(torch.tanh(att_inputs))
+        # Equation(2).
         # (batch_size, seq_length)
         attention_weights = F.softmax(score, dim=1).squeeze(2)
         attention_weights = attention_weights * x_padding_masks
         # Normalize attention weights after excluding padded positions.
         normalization_factor = attention_weights.sum(1, keepdim=True)
         attention_weights = attention_weights / normalization_factor
+        # Equation(3).
         # (batch_size, 1, 2*hidden_units)
         context_vector = torch.bmm(attention_weights.unsqueeze(1),
                                    encoder_output)
@@ -131,6 +134,7 @@ class Attention(nn.Module):
 
         # Update coverage vector.
         if config.coverage:
+            # Equation(10).
             coverage_vector = coverage_vector + attention_weights
 
         return context_vector, attention_weights, coverage_vector
@@ -183,6 +187,7 @@ class Decoder(nn.Module):
 
         decoder_output, decoder_states = self.lstm(decoder_emb, decoder_states)
 
+        # Equation(4)
         # concatenate context vector and decoder state
         # (batch_size, 3*hidden_units)
         decoder_output = decoder_output.view(-1, config.hidden_size)
@@ -206,8 +211,8 @@ class Decoder(nn.Module):
 
         p_gen = None
         if config.pointer:
+            # Equation(8).
             # Calculate p_gen.
-            # Refer to equation (8).
             x_gen = torch.cat([
                 context_vector,
                 s_t.squeeze(0),
@@ -309,7 +314,7 @@ class PGN(nn.Module):
         # Clip the probabilities.
         p_gen = torch.clamp(p_gen, 0.001, 0.999)
         # Get the weighted probabilities.
-        # Refer to equation (9).
+        # Equation (9).
         p_vocab_weighted = p_gen * p_vocab
         # (batch_size, seq_len)
         attention_weighted = (1 - p_gen) * attention_weights
@@ -321,7 +326,6 @@ class PGN(nn.Module):
         p_vocab_extended = torch.cat([p_vocab_weighted, extension], dim=1)
 
         # Add the attention weights to the corresponding vocab positions.
-        # Refer to equation (9).
         final_distribution = \
             p_vocab_extended.scatter_add_(dim=1,
                                           index=x,
@@ -389,12 +393,15 @@ class PGN(nn.Module):
 
             # Apply a mask such that pad zeros do not affect the loss
             mask = torch.ne(y_t, 0).byte()
+            # Equation(6)
             # Do smoothing to prevent getting NaN loss because of log(0).
             loss = -torch.log(target_probs + config.eps)
 
             if config.coverage:
+                # Equation(12)
                 # Add coverage loss.
                 ct_min = torch.min(attention_weights, coverage_vector)
+                # Equation(13)
                 cov_loss = torch.sum(ct_min, dim=1)
                 loss = loss + config.LAMBDA * cov_loss
 
@@ -402,7 +409,7 @@ class PGN(nn.Module):
             loss = loss * mask
 
             step_losses.append(loss)
-
+        # Equation(7)
         sample_losses = torch.sum(torch.stack(step_losses, 1), 1)
         # get the non-padded length of each sequence in the batch
         seq_len_mask = torch.ne(y, 0).byte().float()
