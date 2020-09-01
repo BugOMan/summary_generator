@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from typing import Optional
+
 import torch
 
 # General
@@ -12,6 +14,7 @@ pointer = True
 # Data
 max_vocab_size = 20000
 embed_file = None  # use pre-trained embeddings
+source = 'big_samples'    # use value: train or  big_samples 
 data_path: str = '../files/train.txt'
 val_data_path = '../files/dev.txt'
 test_data_path = '../files/test.txt'
@@ -40,6 +43,8 @@ epochs = 1
 batch_size = 32
 coverage = True
 fine_tune = False
+scheduled_sampling = False
+weight_tying = False
 max_grad_norm = 2.0
 is_cuda = True
 DEVICE = torch.device("cuda" if is_cuda else "cpu")
@@ -51,9 +56,15 @@ if pointer:
             model_name = 'ft_pgn'
         else:
             model_name = 'cov_pgn'
+    elif scheduled_sampling:
+        model_name = 'ss_pgn'
+    elif weight_tying:
+        model_name = 'wt_pgn'
     else:
-        model_name = 'pgn'
-
+        if source == 'big_samples':
+            model_name = 'pgn_big_samples'
+        else:    
+            model_name = 'pgn'
 else:
     model_name = 'baseline'
 

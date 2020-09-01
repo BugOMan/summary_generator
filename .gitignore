@@ -1,5 +1,7 @@
 /.idea
 .DS_Store
-/data
+/data/output
+/data/saved
+/data/word_vectors
 /doc
 /files

@@ -1,7 +1,7 @@
 # summary generator
 ### 文本摘要生成
 使用keras实现paper：Get To The Point: Summarization with Pointer-Generator Networks
-#### 模型结构
+#### 一、模型结构
 ![](./.github/model.png)  
 
 分三步实现论文：
@@ -177,7 +177,7 @@ cov_loss = torch.sum(ct_min, dim=1)
 loss = loss + config.LAMBDA * cov_loss
 ```
 
-#### 代码目录介绍
+#### 二、代码目录介绍
 1. config.py  存放训练和测试所用的各种参数。
 2. dataset.py 数据集处理类。
 3. evaluate.py 计算loss
@@ -198,7 +198,7 @@ python version：3.6
 
 pytorch version：1.3.1
 
-#### 运行命令
+#### 三、运行命令
 
 ```python
 # train model
@@ -211,4 +211,32 @@ python predict.py
 ![](./.github/predict.png)  
 
 
-#### 数据增强方式
+#### 四、数据增强方式
+1、单词替换:embed_replace.py
+通过替换reference中的词⽣成新的reference样本。
+通过tfidf权重对词表⾥的词进⾏排序，然后替换排序靠后的词。
+选择在embedding的词向量空间中寻找语义最接近的词进⾏替换。
+
+2、回译:back_translate.py
+利⽤百度translate API 接⼝将source ，reference翻译成英语，再由英语翻译成汉语，形成新样本。
+
+3、生成样本:semi-supervise.py
+半监督学习是利⽤标签数据+⽆标签数据混合成的训练数据对模型进⾏训练。
+利⽤⼀种类似半监督学习的⽅式，我们训练出⼀个⽂本⽣成模型后，
+我们可以利⽤训练好的模型为我们原始样本中的 reference ⽣成新的 source，并作为新的样本继续训练我们的模型。
+
+#### 五、有意思的trick
+1、Weight tying: config.weight_tying
+共享Decoder的input embedding 和 output embedding 权重矩阵，使得其输⼊的词向量表达具有⼀致性。
+具体请参看论⽂：https://arxiv.org/abs/1608.05859 。
+除此之外共享权重还可以尝试加⼊Encoder的input embedding。（three-way tying）
+
+2、Scheduled sampling: config.scheduled_sampling
+每个 time step 以⼀个 p 的概率进⾏ Teacher forcing，以 1-p的概率不进⾏ Teacher forcing。
+p 的⼤⼩可以随着 batch 或者 epoch衰减，即开始训练的阶段完全使⽤ ground truth 以加快模型收敛，
+到后⾯逐渐将 ground truth 替换成模型⾃⼰的输出，到训练后期就与预测阶段的输出⼀致。
+详⻅Scheduled Sampling for Sequence Prediction with Recurrent Neural Networks。
+https://arxiv.org/pdf/1506.03099.pdf
+![](./.github/teacher_force.png)  
+
+

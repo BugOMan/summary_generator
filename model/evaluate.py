@@ -45,11 +45,7 @@ def evaluate(model, val_data, epoch):
                 y = y.to(DEVICE)
                 x_len = x_len.to(DEVICE)
                 len_oovs = len_oovs.to(DEVICE)
-            loss = model(x,
-                         x_len,
-                         y,
-                         len_oovs,
-                         batch=batch,
-                         num_batches=len(val_dataloader))
+            # Calculate loss.  Call model forward propagation
+            loss = model(x, x_len, y, len_oovs, batch=batch, num_batches=len(val_dataloader), teacher_forcing=True)
             val_loss.append(loss.item())
     return np.mean(val_loss)

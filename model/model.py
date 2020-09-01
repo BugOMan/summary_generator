@@ -33,12 +33,12 @@ class Encoder(nn.Module):
                             batch_first=True)
 
 #     @timer('encoder')
-    def forward(self, x):
+    def forward(self, x, decoder_embedding):
         """Define forward propagation for the endoer.
 
         Args:
             x (Tensor): The input samples as shape (batch_size, seq_len).
-
+            decoder_embedding (torch.nn.modules): The input embedding layer from decoder
         Returns:
             output (Tensor):
                 The output of lstm with shape
@@ -47,7 +47,10 @@ class Encoder(nn.Module):
                 The hidden states of lstm (h_n, c_n).
                 Each with shape (2, batch_size, hidden_units)
         """
-        embedded = self.embedding(x)
+        if config.weight_tying:
+            embedded = decoder_embedding(x)
+        else:
+            embedded = self.embedding(x)
         output, hidden = self.lstm(embedded)
 
         return output, hidden
@@ -200,7 +203,10 @@ class Decoder(nn.Module):
         # (batch_size, hidden_units)
         FF1_out = self.W1(concat_vector)
         # (batch_size, vocab_size)
-        FF2_out = self.W2(FF1_out)
+        if config.weight_tying:
+            FF2_out = torch.mm(FF1_out, torch.t(self.embedding.weight))
+        else:
+            FF2_out = self.W2(FF1_out)
         # (batch_size, vocab_size)
         p_vocab = F.softmax(FF2_out, dim=1)
 
@@ -334,7 +340,7 @@ class PGN(nn.Module):
         return final_distribution
 
 #     @timer('model forward')
-    def forward(self, x, x_len, y, len_oovs, batch, num_batches):
+    def forward(self, x, x_len, y, len_oovs, batch, num_batches, teacher_forcing):
         """Define the forward propagation for the seq2seq model.
 
         Args:
@@ -347,6 +353,7 @@ class PGN(nn.Module):
                 The numbers of out-of-vocabulary words for samples in this batch.
             batch (int): The number of the current batch.
             num_batches(int): Number of batches in the epoch.
+            teacher_forcing(bool): teacher_forcing or not
 
         Returns:
             batch_loss (Tensor): The average loss of the current batch.
@@ -354,17 +361,19 @@ class PGN(nn.Module):
 
         x_copy = replace_oovs(x, self.v)
         x_padding_masks = torch.ne(x, 0).byte().float()
-        encoder_output, encoder_states = self.encoder(x_copy)
+        encoder_output, encoder_states = self.encoder(x_copy, self.decoder.embedding)
         # Reduce encoder hidden states.
         decoder_states = self.reduce_state(encoder_states)
         # Initialize coverage vector.
         coverage_vector = torch.zeros(x.size()).to(self.DEVICE)
         # Calculate loss for every step.
         step_losses = []
+        x_t = y[:, 0]
         for t in range(y.shape[1]-1):
 
             # Do teacher forcing.
-            x_t = y[:, t]
+            if teacher_forcing:
+                x_t = y[:, t]
             x_t = replace_oovs(x_t, self.v)
 
             y_t = y[:, t+1]

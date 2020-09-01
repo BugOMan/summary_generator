@@ -264,3 +264,40 @@ def replace_oovs(in_tensor, vocab):
     oov_token = torch.full(in_tensor.shape, vocab.UNK).long().to(config.DEVICE)
     out_tensor = torch.where(in_tensor > len(vocab) - 1, oov_token, in_tensor)
     return out_tensor
+
+
+class ScheduledSampler():
+    def __init__(self, phases):
+        self.phases = phases
+        self.scheduled_probs = [i / (self.phases - 1) for i in range(self.phases)]
+
+    def teacher_forcing(self, phase):
+        """According to a certain probability to choose whether to execute teacher_forcing
+
+        Args:
+            phase (int): probability level  if phase = 0, 100% teacher_forcing ,phase = self.phases - 1, 0% teacher_forcing 
+
+        Returns:
+            bool: teacher_forcing or not 
+        """
+        sampling_prob = random.random
+        if sampling_prob >= self.scheduled_probs[phase]:
+            return True
+        else:
+            return False
+
+
+
+def config_info(config):
+    """get some config information
+
+    Args:
+        config (model): define in  model/config.py
+    Returns:
+        string: config information
+    """
+    info = 'model_name = {}, pointer = {}, coverage = {}, fine_tune = {}, scheduled_sampling = {}, weight_tying = {},' +\
+          'source = {}  '
+    return (info.format(config.model_name, config.pointer, config.coverage, config.fine_tune, config.scheduled_sampling,
+                      config.weight_tying, config.source))
+

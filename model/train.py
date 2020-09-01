@@ -24,6 +24,8 @@ from model import PGN
 import config
 from evaluate import evaluate
 from dataset import collate_fn, SampleDataset
+from utils import ScheduledSampler, config_info
+
 
 
 def train(dataset, val_dataset, v, start_epoch=0):
@@ -56,8 +58,7 @@ def train(dataset, val_dataset, v, start_epoch=0):
 
     # Define the optimizer.
     optimizer = optim.Adam(model.parameters(),
-                              lr=config.learning_rate,
-                              )
+                           lr=config.learning_rate)
     train_dataloader = DataLoader(dataset=train_data,
                                   batch_size=config.batch_size,
                                   shuffle=True,
@@ -72,10 +73,25 @@ def train(dataset, val_dataset, v, start_epoch=0):
     # SummaryWriter: Log writer used for TensorboardX visualization.
     writer = SummaryWriter(config.log_path)
     # tqdm: A tool for drawing progress bars during training.
+    # scheduled_sampler : A tool for choosing teacher_forcing or not
+    num_epochs = len(range(start_epoch, config.epochs))
+    scheduled_sampler = ScheduledSampler(num_epochs)
+
+    if config.scheduled_sampling:
+        print('scheduled_sampling mode.')
+    #  teacher_forcing = True
+
     with tqdm(total=config.epochs) as epoch_progress:
         for epoch in range(start_epoch, config.epochs):
+            print(config_info(config))
             batch_losses = []  # Get loss of each batch.
             num_batches = len(train_dataloader)
+            # set a teacher_forcing signal
+            if config.scheduled_sampling:
+                teacher_forcing = scheduled_sampler.teacher_forcing(epoch - start_epoch)
+            else:
+                teacher_forcing = True
+            print('teacher_forcing = {}'.format(teacher_forcing))
             with tqdm(total=num_batches//100) as batch_progress:
                 for batch, data in enumerate(tqdm(train_dataloader)):
                     x, y, x_len, y_len, oov, len_oovs = data
@@ -88,8 +104,10 @@ def train(dataset, val_dataset, v, start_epoch=0):
 
                     model.train()  # Sets the module in training mode.
                     optimizer.zero_grad()  # Clear gradients.
-                    # Calculate loss.
-                    loss = model(x, x_len, y, len_oovs, batch=batch, num_batches=num_batches)
+                    # Calculate loss.  Call model forward propagation
+                    loss = model(x, x_len, y, len_oovs, batch=batch, num_batches=num_batches,
+                                 teacher_forcing=teacher_forcing)
+
                     batch_losses.append(loss.item())
                     loss.backward()  # Backpropagation.
 
